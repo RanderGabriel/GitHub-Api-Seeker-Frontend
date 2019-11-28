@@ -4,7 +4,7 @@ import './App.css';
 import axios from 'axios'
 import Chart from 'chart.js'
 
-function Menu({ onClickRepo, onClickRank, onClickProfile }) {
+function Menu({ onClickRepo, onClickRank, onClickProfile, onClickGraph }) {
   return (
     <div className="Menu col">
       <h2 className="Menu-title"> Queries</h2>
@@ -16,9 +16,13 @@ function Menu({ onClickRepo, onClickRank, onClickProfile }) {
         Linguagens TOP por ano
         <i className="fas fa-chevron-right"></i>
       </div>
-      <div className="Query-button" onClick={onClickProfile}>
+      <div hidden={true} className="Query-button" onClick={onClickProfile}>
         Buscar informações de um usuário
         <i className="fas fa-chevron-right"></i>
+      </div>
+      <div className="Query-button" onClick={onClickGraph}>
+        Projetos criados por mês / ano
+        <i className="fas fa-chevron-right" ></i>
       </div>
 
     </div>
@@ -34,39 +38,21 @@ function Item({ data }) {
     </div>);
 }
 
-class LineChart extends React.Component {
+class Ranking extends React.Component {
 
   constructor(props) {
     super(props);
-    this.myRef = React.createRef();
     this.state = {
       text: "",
     }
   }
-  componentDidMount() {
-    console.log(this.myRef.current);
-    const ctx = this.myRef.current;
-    const chart = new Chart(ctx, {
-      // The type of chart we want to create
-      type: 'line',
 
-      // The data for our dataset
-      data: {
-        labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
-        datasets: [{
-          label: 'Top language',
-          backgroundColor: 'rgb(255, 99, 132)',
-          borderColor: 'rgb(255, 99, 132)',
-          data: [0, 10, 5, 2, 20, 30, 45]
-        }]
-      },
-      options: {}
-    });
-  }
 
   render() {
     return (
       <div>
+        <h3>Buscar ranking de linguagens (insira o ano)</h3>
+
         <form onSubmit={(evt) => {
           evt.preventDefault();
           this.props.onSubmit(this.state.text)
@@ -97,7 +83,6 @@ class LineChart extends React.Component {
 
             </table>
           </div>}
-        {<canvas hidden={true} ref={this.myRef} id="myChart"></canvas>}
       </div>
 
     )
@@ -115,8 +100,9 @@ function ProjectsForUser({ data, onSubmit }) {
     setText(evt.target.value)
   }
   return (<div>
+    <h3>Buscar repositórios de um usuário</h3>
     <form action="">
-      <input className="FormInput" value={text} onChange={updateText} /><button onClick={onClick} className="FormButton" />
+      <input className="FormInput" value={text} onChange={updateText} /><button onClick={onClick} className="FormButton">Buscar</button>
     </form>
 
     {data.map((el) => (
@@ -130,6 +116,7 @@ function UserProfile({ data, onSubmit }) {
   console.log(text);
   return (
     <>
+      <h3>Buscar informações de um usuário</h3>
       <form onSubmit={(evt) => {
         evt.preventDefault();
         onSubmit(text)
@@ -144,38 +131,77 @@ function UserProfile({ data, onSubmit }) {
   );
 }
 
+class LineGraph extends React.Component {
+
+  constructor(props) {
+    super(props);
+    this.myRef = React.createRef();
+    this.state = { chart: undefined }
+  }
+  componentDidMount() {
+    this.props.onSubmit();
+  }
+
+  render() {
+    const ctx = this.myRef.current;
+    if (!this.state.chart && this.props.data != null && this.props.data.length > 0) {
+      this.setState({
+        chart: new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: this.props.data.map(el => el.month_year),
+            datasets: [{
+              label: 'Projetos criados',
+              backgroundColor: 'rgb(255, 99, 132)',
+              borderColor: 'rgb(255, 99, 132)',
+              data: this.props.data.map(el => el.amount)
+            }]
+          },
+          options: {}
+        })
+      });
+    }
+    return (<canvas ref={this.myRef} id="myChart"></canvas>)
+  }
+
+}
+
 function App() {
   //const [data, setData] = useState([])
   const [rank, setRank] = useState([]);
   const [profile, setProfile] = useState([]);
   const [repos, setRepos] = useState([]);
   const [toRender, setToRender] = useState("");
+  const [graph, setGraph] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const onSubmitGraph = async () => {
+    setLoading(true);
+    const response = await axios.get("https://localhost:44396/api/users/stats");
+    setLoading(false);
+    setGraph(response.data);
+  }
 
   const onSubmitProjects = async (text) => {
-    const response = await axios.get("https://localhost:44396/api/users/" + text + "/projects");
+    setLoading(true);
+    const response = await axios.get("https://localhost:44396/api/users/projects?login=" + text);
+    setLoading(false);
     setRepos(response.data.map(el => ({ ...el, key: el.id })))
   }
 
   const onSubmitProfile = async (text) => {
+    setLoading(true);
     const response = await axios.get("https://localhost:44396/api/users/retrieveUser/" + text);
+    setLoading(false);
     console.log(response)
     setProfile(response.data)
   }
 
   const onSubmitRank = async (text) => {
-    //const response = await axios.get("https://localhost:44396/api/projects/languagesRank?year=" + text);
-    //console.log(response);
-    setRank([
-      {
-        projects_count: 1000,
-        language: "C#"
-      },
-      {
-        projects_count: 500,
-        language: "JavaScript"
-      }
-    ])
-    //setRank(response.data);
+    setLoading(true);
+    const response = await axios.get("https://localhost:44396/api/projects/languagesRank?year=" + text);
+    setLoading(false);
+    setRank(response.data);
   }
 
   return (
@@ -189,24 +215,38 @@ function App() {
           }}
           onClickProfile={async () => {
             setToRender("PROFILE");
+          }}
+          onClickGraph={async () => {
+            console.log("oi")
+            setToRender("GRAPH");
           }}>
         </Menu>
-        <div className="App-header col">
-          {
-            (toRender == "PROJECTS_FOR_USER" &&
-              <ProjectsForUser data={repos} onSubmit={onSubmitProjects} />
-            )
-            ||
-            (toRender == "LANGUAGES_RANK" &&
-              <LineChart onSubmit={onSubmitRank} data={rank}></LineChart>
-            )
-            ||
-            (toRender == "PROFILE" &&
-              <UserProfile onSubmit={onSubmitProfile} data={profile}></UserProfile>
-            )
+        {
+          loading &&
+          <div className="App-header col">
+            <div class="lds-dual-ring"></div>
+          </div>
+        }
+        {
+          <div hidden={loading} className="App-header col">
+            {
+              (toRender == "PROJECTS_FOR_USER" &&
+                <ProjectsForUser data={repos} onSubmit={onSubmitProjects} />
+              )
+              ||
+              (toRender == "LANGUAGES_RANK" &&
+                <Ranking onSubmit={onSubmitRank} data={rank}></Ranking>
+              )
+              ||
+              (toRender == "PROFILE" &&
+                <UserProfile onSubmit={onSubmitProfile} data={profile}></UserProfile>
+              )
+              ||
+              (toRender == "GRAPH" &&
+                <LineGraph data={graph} onSubmit={onSubmitGraph}></LineGraph>)
 
-          }
-        </div>
+            }
+          </div>}
       </div>
     </div>
 
